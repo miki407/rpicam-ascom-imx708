@@ -559,13 +559,31 @@ class imagearray:
             # Release the request
             request.release()
 
-            # Reformat the array. ChatGPT optimized this for speed
-            array = array.view(np.uint16) * np.left_shift(1, (16 - 12))
+            # First step  : Unpack 12bit values from 8bit stream, store as 16bit. Values are left shifted 4 bits, ie 2 ^ 4 (=16) too large. 
+            # Will be in range 0 - 65535 so we have to do a right_shift of 4
+            #array = array.view(np.uint16) >> 4 # Ensure array is of type uint16 (no need for astype) + In-place right shift
+            #print(state.gainvalue)
+            unpacked_raw = np.asarray(array, dtype=np.uint8)
+            unpacked_raw = unpacked_raw.astype(np.uint16)
+            shape = unpacked_raw.shape
 
-            # Resize array to correct frame size according to max resolution and subframe settings
-            array = array[state.start_y:state.start_y + state.num_y, state.start_x:state.start_x + state.num_x]
+            unpacked = np.zeros((shape[0],int(shape[1] * 4 / 5)), dtype=np.uint16)
+            unpacked[:,0::4] = (unpacked_raw[:,0::5] << 2) | ((unpacked_raw[:,4::5] >> 0) & 0b11)
+            unpacked[:,1::4] = (unpacked_raw[:,1::5] << 2) | ((unpacked_raw[:,4::5] >> 2) & 0b11)
+            unpacked[:,2::4] = (unpacked_raw[:,2::5] << 2) | ((unpacked_raw[:,4::5] >> 4) & 0b11)
+            unpacked[:,3::4] = (unpacked_raw[:,3::5] << 2) | ((unpacked_raw[:,4::5] >> 6) & 0b11)
+
+            # Second step  : Resize array to correct frame size according to max resolution and subframe settings
+            array = unpacked[state.start_y:state.start_y + state.num_y, 
+                          state.start_x:state.start_x + state.num_x]
+
+            # Third step :Transpose the array
             array = np.transpose(array)
+            np.left_shift(unpacked.view(np.uint16), 6, out=unpacked.view(np.uint16))
 
+            #array = array[state.start_y: state.start_y + state.num_y, state.start_x: state.start_x + state.num_x]
+            #array = np.transpose(array)
+            # Resize array to correct frame size according to max resolution and subframe settings
             accept = req.headers.get("ACCEPT")
             if accept is not None and 'imagebytes' in accept:
                 # ImageBytes
