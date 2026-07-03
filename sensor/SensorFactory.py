@@ -5,7 +5,7 @@ from sensor.IMX477 import IMX477
 
 class SensorFactory:
     _sensor_mapping = {
-        "imx477": IMX477(),
+        "imx708": IMX477(),
         # TODO Add more here
     }
 
